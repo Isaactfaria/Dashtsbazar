@@ -4,10 +4,10 @@ Bling Dashboard – Tiburcio's Stuff (single store)
 -------------------------------------------------
 - CLIENT_ID / CLIENT_SECRET via Secrets
 - Botão "Autorizar TS" (vai ao Bling)
-- Captura do ?code=:
-    1) st.query_params
-    2) experimental_get_query_params()
-    3) Fallback manual: colar URL ou code e clicar "Trocar agora"
+- Captura do ?code= por 3 caminhos:
+  1) st.query_params
+  2) experimental_get_query_params()
+  3) Campo SEMPRE visível para colar a URL de retorno OU só o code
 - Guarda refresh_token em memória (session_state) e renova access_token
 - Sem campo "ID da Loja"
 """
@@ -75,13 +75,13 @@ def refresh_access_token(client_id: str, client_secret: str, refresh_token: str)
     return j.get("access_token", ""), j.get("refresh_token")
 
 # =========================
-# CAPTURA DO CODE (logo no início) – 2 automáticos
+# CAPTURA AUTOMÁTICA DO CODE (2 jeitos)
 # =========================
 def normalize_qp(d: dict) -> dict:
     return {k: (v[0] if isinstance(v, list) else v) for k, v in d.items()}
 
 def try_capture_code_auto() -> Optional[tuple[str, str]]:
-    # 1) query_params novo
+    # 1) query_params (novo)
     try:
         qp = normalize_qp(dict(st.query_params.items()))
         code, state = qp.get("code"), qp.get("state")
@@ -89,7 +89,7 @@ def try_capture_code_auto() -> Optional[tuple[str, str]]:
             return code, state
     except Exception:
         pass
-    # 2) experimental_
+    # 2) experimental_ (antigo)
     try:
         qp = normalize_qp(st.experimental_get_query_params())
         code, state = qp.get("code"), qp.get("state")
@@ -141,9 +141,16 @@ except Exception:
 with st.sidebar.expander("Ver URL de autorização (debug)"):
     st.code(ts_url if "ts_url" in locals() else "—", language="text")
 
-# Fallback manual: cole a URL que volta do Bling OU só o code, e trocamos na hora
-with st.sidebar.expander("Se travar: cole o link de retorno (ou o code)"):
-    manual = st.text_input("Cole aqui a URL completa ou apenas o code", placeholder="https://dashboard-ts.streamlit.app/?code=...&state=auth-ts  ou  e57518... ")
+# Campo SEMPRE visível para colar a URL (ou code) — força a troca mesmo se auto falhar
+st.subheader("⚙️ Finalizar autorização (se necessário)")
+st.write("Se a página voltou com `?code=...&state=auth-ts` e o painel não atualizou, cole aqui **a URL completa** da barra do navegador **ou só o `code`** e clique em **Trocar agora**.")
+
+manual = st.text_input(
+    "Cole a URL de retorno do Bling ou só o code",
+    placeholder="https://dashboard-ts.streamlit.app/?code=...&state=auth-ts  ou  e57518... ",
+)
+colA, colB = st.columns([1,3])
+with colA:
     if st.button("Trocar agora"):
         code_value = None
         if manual.strip().startswith("http"):
@@ -166,7 +173,6 @@ with st.sidebar.expander("Se travar: cole o link de retorno (ou o code)"):
                 if new_ref:
                     st.session_state["ts_refresh"] = new_ref
                     st.success("TS autorizado e refresh_token atualizado!")
-                    # limpar query da página corrente (caso esteja com code)
                     try:
                         st.query_params.clear()
                     except Exception:
@@ -176,10 +182,19 @@ with st.sidebar.expander("Se travar: cole o link de retorno (ou o code)"):
                     st.error("Não veio refresh_token na resposta do Bling.")
             except Exception as e:
                 st.error(f"Falha na troca manual do code: {e}")
-        else:
-            st.error("Não encontrei o code na URL/entrada.")
 
-# Filtros (sem ID de loja)
+with colB:
+    # Debug rápido: mostra o que o app está vendo nos query params
+    with st.expander("Debug rápido dos parâmetros da URL"):
+        try:
+            st.write("st.query_params →", dict(st.query_params.items()))
+        except Exception:
+            st.write("st.query_params indisponível")
+        try:
+            st.write("experimental_get_query_params →", st.experimental_get_query_params())
+        except Exception:
+            st.write("experimental_get_query_params indisponível")
+
 st.sidebar.header("Filtros")
 DEFAULT_START = (dt.date.today() - relativedelta(months=1)).replace(day=1)
 DEFAULT_END   = dt.date.today()
@@ -246,7 +261,7 @@ def fetch_orders(client_id: str, client_secret: str, refresh_token: str,
 # Sem refresh não chamamos API
 if not st.session_state["ts_refresh"]:
     with st.expander("Avisos/Erros de integração", expanded=True):
-        st.info("Autorize a conta **TS** para carregar as vendas (clique em **Autorizar TS** ou use o fallback manual).")
+        st.info("Autorize a conta **TS** (clique em **Autorizar TS** ou use o campo acima para colar a URL/code).")
     st.stop()
 
 errors: List[str] = []
