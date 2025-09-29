@@ -2,11 +2,11 @@
 """
 Bling Dashboard – Tiburcio's Stuff (single store)
 -------------------------------------------------
-- Client ID / Secret via Secrets
+- CLIENT_ID / CLIENT_SECRET via Secrets
 - Botão "Autorizar TS" (vai ao Bling)
-- Captura ultra-robusta do ?code= (sem colar nada)
-- Guarda refresh_token em memória (session_state) e renova access_token
-- Sem campo "ID da Loja" (uma loja apenas)
+- Captura robusta do ?code= (query_params + experimental + fallback JS via components)
+- Guarda refresh_token em memória (session_state) e renova access_token automaticamente
+- Sem campo "ID da Loja" (one-tenant)
 """
 
 from __future__ import annotations
@@ -18,11 +18,12 @@ from urllib.parse import urlencode
 import pandas as pd
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 # =========================
 # CONFIG
 # =========================
-APP_BASE = st.secrets.get("APP_BASE", "https://dashboard-ts.streamlit.app")  # URL do seu app
+APP_BASE = st.secrets.get("APP_BASE", "https://dashboard-ts.streamlit.app")  # URL pública do app
 REDIRECT_URI = APP_BASE  # deve ser idêntico ao Link de redirecionamento no Bling
 
 TOKEN_URL  = "https://www.bling.com.br/Api/v3/oauth/token"
@@ -35,7 +36,7 @@ st.set_page_config(page_title="Dashboard de vendas – Bling (Tiburcio’s Stuff
 # =========================
 # STATE
 # =========================
-# Se existir TS_REFRESH_TOKEN nos Secrets, já começamos com ele
+# Se existir TS_REFRESH_TOKEN nos Secrets, já usamos para começar
 st.session_state.setdefault("ts_refresh", st.secrets.get("TS_REFRESH_TOKEN"))
 
 # =========================
@@ -85,6 +86,7 @@ def _normalize_qp_dict(qd) -> dict:
     return out
 
 def capture_code_state() -> Optional[tuple[str, str]]:
+    """Tenta capturar (code, state) da URL por 3 caminhos."""
     # 1) st.query_params (Streamlit novo)
     try:
         qp = dict(st.query_params.items())
@@ -103,19 +105,22 @@ def capture_code_state() -> Optional[tuple[str, str]]:
             return code, state
     except Exception:
         pass
-    # 3) fallback: usa campo oculto para receber window.location.search via JS
-    st.html("""
+    # 3) Fallback: captura via JS + campo hidden
+    components.html("""
     <script>
       (function(){
-        const p = new URLSearchParams(window.location.search);
-        const code = p.get('code'); const state = p.get('state');
-        if (code && state) {
-          const el = window.parent.document.querySelector('input[aria-label="__oauth_code_state"]');
-          if (el) { el.value = code + "|" + state; el.dispatchEvent(new Event('input', {bubbles:true})); }
-        }
+        try {
+          const p = new URLSearchParams(window.location.search);
+          const code = p.get('code'); const state = p.get('state');
+          if (code && state) {
+            const el = window.parent.document.querySelector('input[aria-label="__oauth_code_state"]');
+            if (el) { el.value = code + "|" + state; el.dispatchEvent(new Event('input', {bubbles:true})); }
+          }
+        } catch(e) {}
       })();
     </script>
     """, height=0)
+
     hidden = st.text_input("__oauth_code_state", key="__oauth_code_state", label_visibility="collapsed")
     if hidden and "|" in hidden:
         code, state = hidden.split("|", 1)
@@ -272,4 +277,4 @@ if not by_loja.empty:
     st.bar_chart(by_loja.set_index("loja_id"))
 
 st.subheader("Tabela de pedidos")
-st.dataframe(df.sort_values("data", ascending=False))
+st.dataframe(df.sort_values("data", descending=True) if hasattr(pd.DataFrame, "sort_values") else df)
