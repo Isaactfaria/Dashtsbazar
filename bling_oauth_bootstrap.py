@@ -30,8 +30,8 @@ import os
 import sys
 from typing import Optional
 
-CLIENT_ID = "2b9d9677cf98c166950656fd9d7161795d499e58"
-CLIENT_SECRET = "f3504e6d70c566bff108d0feabe4f477bab3be49b7198498ff57e730db89"
+CLIENT_ID = "48831318d181633f4751ac7f63fc716ff50ef259"
+CLIENT_SECRET = "243fc9583cb9814b61e1ea491e754538ede9d09c8c90e9d2eb959a96c512"
 REDIRECT_URI = "http://localhost:8001/callback"
 AUTH_URL = "https://www.bling.com.br/Api/v3/oauth/authorize"
 TOKEN_URL = "https://www.bling.com.br/Api/v3/oauth/token"
@@ -184,3 +184,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Erro: {e}")
         sys.exit(1)
+
